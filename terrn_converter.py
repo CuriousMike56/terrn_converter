@@ -2,6 +2,69 @@ import os
 import sys
 import uuid
 
+def convert_cfg_to_otc(cfg_file):
+    try:
+        print(f"Converting {cfg_file} to otc format...")
+        
+        # Read values from .cfg
+        heightmap_size = None
+        heightmap_bpp = None
+        heightmap_flip = False
+        world_size_x = None
+        world_size_z = None
+        max_height = None
+        terrain_name = os.path.splitext(os.path.basename(cfg_file))[0]
+        
+        with open(cfg_file, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith('#') or not line:
+                    continue
+                    
+                if 'Heightmap.raw.size=' in line:
+                    heightmap_size = line.split('=')[1]
+                elif 'Heightmap.raw.bpp=' in line:
+                    heightmap_bpp = line.split('=')[1]
+                elif 'Heightmap.flip=' in line and line.split('=')[1].lower() == 'true':
+                    heightmap_flip = True
+                elif 'PageWorldX=' in line:
+                    world_size_x = line.split('=')[1]
+                elif 'PageWorldZ=' in line:
+                    world_size_z = line.split('=')[1]
+                elif 'MaxHeight=' in line:
+                    max_height = line.split('=')[1]
+        
+        if not all([heightmap_size, heightmap_bpp, world_size_x, world_size_z, max_height]):
+            print("Error: Missing required values in cfg file")
+            return False
+            
+        # Create .otc file
+        otc_path = os.path.splitext(cfg_file)[0] + '.otc'
+        with open(otc_path, 'w') as f:
+            f.write(f'Heightmap.0.0.raw.size={heightmap_size}\n')
+            f.write(f'Heightmap.0.0.raw.bpp={heightmap_bpp}\n')
+            f.write(f'Heightmap.0.0.flipX={1 if heightmap_flip else 0}\n')
+            f.write('\n')
+            f.write(f'WorldSizeX={world_size_x}\n')
+            f.write(f'WorldSizeZ={world_size_z}\n')
+            f.write(f'WorldSizeY={max_height}\n')
+            f.write('\n')
+            f.write('disableCaching=1\n')
+            f.write('\n')
+            f.write(f'PageFileFormat={terrain_name}-page-0-0.otc\n')
+            f.write('\n')
+            f.write('MaxPixelError=0\n')
+            f.write('LightmapEnabled=0\n')
+            f.write('SpecularMappingEnabled=1\n')
+            f.write('NormalMappingEnabled=1\n')
+            
+        print(f"Created {otc_path}")
+        return True
+        
+    except Exception as e:
+        print(f"Error converting cfg file: {e}")
+        return False
+
 def convert_terrn_to_terrn2(input_file):
     try:
         print(f"Converting {input_file} to terrn2 format...")
@@ -98,8 +161,14 @@ def convert_terrn_to_terrn2(input_file):
                             continue
                         found_first_object = True
                     
+                    # Skip caelumconfig and landuse-config lines
+                    line = obj.strip()
+                    if (line.startswith('caelumconfig') or
+                        line.startswith('landuse-config')):
+                        continue
+                    
                     # Write everything else as-is, except 'end' keyword
-                    if obj.strip() and obj.strip().lower() != 'end':
+                    if line and line.lower() != 'end':
                         f.write(obj if obj.endswith('\n') else obj + '\n')
                     else:
                         f.write('\n')
@@ -108,6 +177,11 @@ def convert_terrn_to_terrn2(input_file):
         except IOError as e:
             print(f"Error creating {tobj_path}: {e}")
             return False
+
+        # Also convert the cfg file if it exists
+        cfg_path = os.path.join(output_dir, ogre_cfg)
+        if os.path.exists(cfg_path):
+            convert_cfg_to_otc(cfg_path)
 
         # Create .terrn2 file
         output_name = os.path.splitext(input_file)[0] + '.terrn2'
