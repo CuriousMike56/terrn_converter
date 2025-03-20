@@ -25,8 +25,10 @@ def convert_terrn_to_terrn2(input_file):
                     continue
                     
                 # Extract authors from comments
-                if line.lower().startswith("//author"):
-                    parts = line[2:].split(" ")  # Skip // prefix but keep "author"
+                if (line.lower().startswith("//author") or 
+                    line.lower().startswith(";author")):
+                    parts = line[2:] if line.startswith("//") else line[1:]
+                    parts = parts.split(" ")
                     if len(parts) >= 3:
                         # Combine "author" and type (e.g., "author terrain" -> "terrain")
                         author_type = parts[1]  # get terrain, texture, etc.
@@ -81,12 +83,12 @@ def convert_terrn_to_terrn2(input_file):
                         continue
                         
                     # Skip empty lines, metadata comments and author comments
-                    if (not obj.strip() or '//fileinfo' in obj or '//author' in obj.lower()
-                        or (obj.strip().startswith('//') and 
-                            any(c.isdigit() for c in obj.split('=')[0]) and 
-                            '=' in obj)
-                        # For terrains like Flat Map (v10.1), skip comment lines containing 'spawn' before first object definition
-                        or (not found_first_object and 'spawn' in obj.lower() and obj.strip().startswith('//'))):
+                    if (not obj.strip() or 
+                        '//fileinfo' in obj or ';fileinfo' in obj or 
+                        '//author' in obj.lower() or ';author' in obj.lower() or
+                        ((obj.strip().startswith('//') or obj.strip().startswith(';')) and 
+                         any(c.isdigit() for c in obj.split('=')[0]) and 
+                         '=' in obj)):
                         continue
                         
                     # Skip the start position coordinates 
@@ -98,7 +100,7 @@ def convert_terrn_to_terrn2(input_file):
                         
                     if obj.strip():
                         line = obj.strip()
-                        if line.startswith("//"):  # Keep other comments
+                        if line.startswith("//") or line.startswith(";"):  # Keep other comments
                             f.write(obj)
 
                         elif line.startswith("grass "):
