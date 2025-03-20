@@ -4,17 +4,17 @@ import uuid
 
 def convert_terrn_to_terrn2(input_file):
     try:
-        print(f"Converting {input_file} to .terrn2 format...")
+        print(f"Converting {input_file} to terrn2 format...")
         
         terrain_name = ""
         ogre_cfg = ""
-        water_height = None  # Changed to None to detect if water exists
+        water_height = None
         water_color = ""
         start_position = ""
         objects = []
-        author = "unknown"  # Default value
-        gravity = "-9.81"  # Default gravity
-        landuse_cfg = None  # Track landuse config
+        author = "unknown"
+        gravity = "-9.81"
+        landuse_cfg = None
         
         with open(input_file, 'r') as f:
             lines = f.readlines()
@@ -24,9 +24,19 @@ def convert_terrn_to_terrn2(input_file):
                 if not line or line.startswith("//end"):
                     continue
                     
-                # Extract author from comments
+                # Extract author from comments - get actual name without ID/email
                 if line.startswith("//author terrain"):
-                    author = line.split(" ")[-2]
+                    parts = line.split(" ")
+                    # Remove ID and email - find the actual name part
+                    # Format could be: //author terrain -1 author_name author@example.com
+                    # or: //author terrain 69420 author_name
+                    if '@' in line:  # Has email format
+                        author = parts[-2]  # Name is second to last part
+                    else:
+                        author = parts[-1]  # Name is last part
+                    # Skip the ID part
+                    if author.startswith('-') or author.isdigit():
+                        author = parts[-1]
                     continue
                     
                 # Extract gravity value
@@ -82,8 +92,16 @@ def convert_terrn_to_terrn2(input_file):
                         found_first_object = True
                         
                     if obj.strip():
-                        if obj.strip().startswith("//"):  # Keep other comments
+                        line = obj.strip()
+                        if line.startswith("//"):  # Keep other comments
                             f.write(obj)
+
+                        elif line.startswith("grass "):
+                            f.write(line + "\n")
+
+                        elif line.startswith("trees "):
+                            f.write(line + "\n")
+
                         else:
                             coords = obj.split(',')
                             if len(coords) >= 7:  # Only write valid object lines
@@ -105,7 +123,6 @@ def convert_terrn_to_terrn2(input_file):
                 f.write('[General]\n')
                 f.write(f'Name = {terrain_name}\n')
                 f.write(f'GeometryConfig = {os.path.splitext(ogre_cfg)[0]}.otc\n')
-                # Only write water settings if water height exists
                 if water_height:
                     f.write('Water=1\n')
                     f.write(f'WaterLine = {water_height}\n')
@@ -126,7 +143,7 @@ def convert_terrn_to_terrn2(input_file):
                 f.write('[Authors]\n')
                 if author:
                     f.write(f'terrain = {author}\n')
-                f.write(f'terrn2 = terrn_converter\n\n')
+                f.write(f'terrn2 = cm_terrn_converter\n\n')
                 
                 f.write(' \n[Objects]\n')
                 f.write(f'{tobj_name}=\n\n')
