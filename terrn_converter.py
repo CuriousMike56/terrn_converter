@@ -97,27 +97,13 @@ def convert_terrn_to_terrn2(input_file):
                         if len(coords) == 9:  # Start position has 9 coordinates
                             continue
                         found_first_object = True
-                        
-                    if obj.strip():
-                        line = obj.strip()
-                        if line.startswith("//") or line.startswith(";"):  # Keep other comments
-                            f.write(obj)
-
-                        elif line.startswith("grass "):
-                            f.write(line + "\n")
-
-                        elif line.startswith("trees "):
-                            f.write(line + "\n")
-
-                        else:
-                            coords = obj.split(',')
-                            if len(coords) >= 7:  # Only write valid object lines
-                                x, y, z = [float(coords[i].strip()) for i in range(3)]
-                                rx, ry, rz = [float(coords[i].strip()) for i in range(3, 6)]
-                                oname = ','.join(coords[6:]).strip()
-                                f.write(f'{x}, {y}, {z}, {rx}, {ry}, {rz}, {oname}\n')
+                    
+                    # Write everything else as-is, except 'end' keyword
+                    if obj.strip() and obj.strip().lower() != 'end':
+                        f.write(obj if obj.endswith('\n') else obj + '\n')
                     else:
                         f.write('\n')
+
             print(f"Created {tobj_path}")
         except IOError as e:
             print(f"Error creating {tobj_path}: {e}")
