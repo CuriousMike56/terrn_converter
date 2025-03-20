@@ -12,7 +12,7 @@ def convert_terrn_to_terrn2(input_file):
         water_color = ""
         start_position = ""
         objects = []
-        author = "unknown"
+        authors = {}
         gravity = "-9.81"
         landuse_cfg = None
         
@@ -24,19 +24,19 @@ def convert_terrn_to_terrn2(input_file):
                 if not line or line.startswith("//end"):
                     continue
                     
-                # Extract author from comments - get actual name without ID/email
-                if line.startswith("//author terrain"):
-                    parts = line.split(" ")
-                    # Remove ID and email - find the actual name part
-                    # Format could be: //author terrain -1 author_name author@example.com
-                    # or: //author terrain 69420 author_name
-                    if '@' in line:  # Has email format
-                        author = parts[-2]  # Name is second to last part
-                    else:
-                        author = parts[-1]  # Name is last part
-                    # Skip the ID part
-                    if author.startswith('-') or author.isdigit():
-                        author = parts[-1]
+                # Extract authors from comments
+                if line.lower().startswith("//author"):
+                    parts = line[2:].split(" ")  # Skip // prefix but keep "author"
+                    if len(parts) >= 3:
+                        # Combine "author" and type (e.g., "author terrain" -> "terrain")
+                        author_type = parts[1]  # get terrain, texture, etc.
+                        author_name = " ".join(parts[3:])  # Skip "author", type, and ID to get name
+                        
+                        # Remove email if present
+                        if '@' in author_name:
+                            author_name = author_name.split()[0]
+                            
+                        authors[author_type] = author_name
                     continue
                     
                 # Extract gravity value
@@ -80,8 +80,13 @@ def convert_terrn_to_terrn2(input_file):
                         header_count += 1
                         continue
                         
-                    # Skip empty lines and metadata comments
-                    if not obj.strip() or '//fileinfo' in obj or '//author terrain' in obj or '// 129 =' in obj:
+                    # Skip empty lines, metadata comments and author comments
+                    if (not obj.strip() or '//fileinfo' in obj or '//author' in obj.lower()
+                        or (obj.strip().startswith('//') and 
+                            any(c.isdigit() for c in obj.split('=')[0]) and 
+                            '=' in obj)
+                        # For terrains like Flat Map (v10.1), skip comment lines containing 'spawn' before first object definition
+                        or (not found_first_object and 'spawn' in obj.lower() and obj.strip().startswith('//'))):
                         continue
                         
                     # Skip the start position coordinates 
@@ -141,8 +146,10 @@ def convert_terrn_to_terrn2(input_file):
                 f.write('\n\n')
                 
                 f.write('[Authors]\n')
-                if author:
-                    f.write(f'terrain = {author}\n')
+                for author_type, author_name in authors.items():
+                    f.write(f'{author_type} = {author_name}\n')
+                if not authors:
+                    f.write('terrain = unknown\n')
                 f.write(f'terrn2 = cm_terrn_converter\n\n')
                 
                 f.write(' \n[Objects]\n')
