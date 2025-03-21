@@ -14,6 +14,8 @@ def convert_cfg_to_otc(cfg_file):
         world_size_z = None
         max_height = None
         max_pixel_error = "0"
+        heightmap_image = None
+        world_texture = None
         terrain_name = os.path.splitext(os.path.basename(cfg_file))[0]
         
         with open(cfg_file, 'r') as f:
@@ -22,7 +24,11 @@ def convert_cfg_to_otc(cfg_file):
                 if line.startswith('#') or not line:
                     continue
                     
-                if 'Heightmap.raw.size=' in line:
+                if 'Heightmap.image=' in line:
+                    heightmap_image = line.split('=')[1]
+                elif 'WorldTexture=' in line:
+                    world_texture = line.split('=')[1]
+                elif 'Heightmap.raw.size=' in line:
                     heightmap_size = line.split('=')[1]
                 elif 'Heightmap.raw.bpp=' in line:
                     heightmap_bpp = line.split('=')[1]
@@ -41,7 +47,7 @@ def convert_cfg_to_otc(cfg_file):
             print("Error: Missing required values in cfg file")
             return False
             
-        # Create .otc file
+        # Create main .otc file
         otc_path = os.path.splitext(cfg_file)[0] + '.otc'
         with open(otc_path, 'w') as f:
             f.write(f'Heightmap.0.0.raw.size={heightmap_size}\n')
@@ -61,7 +67,31 @@ def convert_cfg_to_otc(cfg_file):
             f.write('SpecularMappingEnabled=1\n')
             f.write('NormalMappingEnabled=1\n')
             
-        print(f"Created {otc_path}")
+        # Create page-0-0.otc file
+        page_path = os.path.join(os.path.dirname(cfg_file), f'{terrain_name}-page-0-0.otc')
+        with open(page_path, 'w') as f:
+            # Write heightmap filename
+            if heightmap_image:
+                f.write(f'{heightmap_image}\n')
+            else:
+                f.write(f'{terrain_name}.raw\n')
+                
+            # Write number of texture layers
+            f.write('2\n')
+            
+            # Write base layer
+            if world_texture:
+                base_name, ext = os.path.splitext(world_texture)
+                base_texture = f"{base_name}_DS.dds"
+            else:
+                base_texture = f'{terrain_name}_DS.dds'
+            f.write(f'; worldSize, diffusespecular, normalheight, blendmap, blendmapmode, alpha\n')
+            f.write(f'{world_size_x}, {base_texture}, blank_NRM.dds\n')
+            
+            # Write detail layer
+            f.write('10, terrain_detail_dark_ds.dds, terrain_detail_nrm.dds, terrain_detail_rgb.png, R, 0.8\n')
+
+        print(f"Created {page_path}")
         return True
         
     except Exception as e:
