@@ -19,27 +19,47 @@ def extract_texture_name(texture_line):
 def parse_etterrain_material(material_file, material_name):
     """Parse an ETTerrain material definition and return texture info"""
     try:
-        print(f"\nParsing ETTerrain material '{material_name}' from {os.path.basename(material_file)}")
+        print(f"\nSearching for material '{material_name}' in {os.path.basename(material_file)}")
         with open(material_file, 'r') as f:
             content = f.read()
             
-        # Find the material section
-        material_start = content.find(f"material {material_name}")
+        # Find the material section with case-insensitive search
+        content_lower = content.lower()
+        search_pattern = f"material {material_name}".lower()
+        material_start = content_lower.find(search_pattern)
         if material_start == -1:
-            print(f"Material '{material_name}' not found in file")
+            print("Material not found in file")
             return None
             
+        print("Found material, checking if it's an ETTerrain material...")
+            
+        # Get the actual material section using the found position
         material_section = content[material_start:]
         material_end = material_section.find("\nmaterial ")
         if material_end != -1:
             material_section = material_section[:material_end]
             
-        # Check if this is an ETTerrain material
-        if "ET/Programs" not in material_section:
-            print("Not an ETTerrain material (ET/Programs not found)")
+        # Check only this specific material for ET identifiers
+        et_identifiers = [
+            "et/program",  # Will match ET/Programs, ET/Program/, etc.
+            "etterrain",   # Will match ETTerrain in any case
+            "etambient"    # Will match ETAmbient in any case
+        ]
+        
+        # Check the material name and its section content
+        material_text = f"{material_name} {material_section}".lower()
+        
+        is_et_material = False
+        for identifier in et_identifiers:
+            if identifier in material_text:
+                is_et_material = True
+                break
+                
+        if not is_et_material:
+            print("Not an ETTerrain material (looking for ET/Program, ETTerrain, or ETAmbient)")
             return None
-            
-        print("Found valid ETTerrain material")
+
+        print("Found valid ETTerrain material, extracting textures...")
         textures = {
             'blendmaps': [],
             'layers': []
@@ -165,6 +185,7 @@ def convert_cfg_to_otc(cfg_file):
             
         # Create page files
         if custom_material:
+            print(f"\nFound custom material name: {custom_material}")
             material_dir = os.path.dirname(cfg_file)
             material_files = [f for f in os.listdir(material_dir) if f.endswith('.material')]
             
