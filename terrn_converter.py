@@ -2,6 +2,98 @@ import os
 import sys
 import uuid
 
+def extract_texture_name(texture_line):
+    """Extract texture filename from a texture_unit line"""
+    # Skip comment lines
+    if texture_line.strip().startswith('//'):
+        return None
+    # Find texture keyword and extract name
+    if 'texture' in texture_line:
+        tex = texture_line.split('texture')[1].strip()
+        # Remove any trailing comments
+        tex = tex.split('//')[0].strip()
+        # Clean up any remaining braces and whitespace
+        return tex.replace('}', '').replace('{', '').strip()
+    return None
+
+def parse_etterrain_material(material_file, material_name):
+    """Parse an ETTerrain material definition and return texture info"""
+    try:
+        print(f"\nParsing ETTerrain material '{material_name}' from {os.path.basename(material_file)}")
+        with open(material_file, 'r') as f:
+            content = f.read()
+            
+        # Find the material section
+        material_start = content.find(f"material {material_name}")
+        if material_start == -1:
+            print(f"Material '{material_name}' not found in file")
+            return None
+            
+        material_section = content[material_start:]
+        material_end = material_section.find("\nmaterial ")
+        if material_end != -1:
+            material_section = material_section[:material_end]
+            
+        # Check if this is an ETTerrain material
+        if "ET/Programs" not in material_section:
+            print("Not an ETTerrain material (ET/Programs not found)")
+            return None
+            
+        print("Found valid ETTerrain material")
+        textures = {
+            'blendmaps': [],
+            'layers': []
+        }
+        
+        # Find Lighting and Splatting passes
+        print("\nExtracting texture information:")
+        lighting_pass = material_section[material_section.find("pass Lighting"):material_section.find("pass Splatting")]
+        splatting_pass = material_section[material_section.find("pass Splatting"):material_section.find("pass", material_section.find("pass Splatting") + 1)]
+        
+        # Extract RGB blendmaps
+        print("\nProcessing blendmaps:")
+        texture_units = lighting_pass.split('texture_unit')
+        for unit in texture_units[1:4]:
+            if '_RGB' in unit:
+                tex = extract_texture_name(unit)
+                print(f"  Found blendmap: {tex}")
+                textures['blendmaps'].append(tex)
+                
+        # Get normal maps
+        print("\nProcessing normal maps:")
+        normal_maps = []
+        for unit in texture_units[4:]:
+            if '_NRM' in unit:
+                tex = extract_texture_name(unit)
+                if tex:
+                    print(f"  Found normal map: {tex}")
+                    normal_maps.append(tex)
+                    
+        # Get diffuse textures
+        print("\nProcessing diffuse textures:")
+        diffuse_maps = []
+        splatting_units = splatting_pass.split('texture_unit')
+        for unit in splatting_units[4:]:
+            if 'texture' in unit and not '_RGB' in unit:
+                tex = extract_texture_name(unit)
+                if tex and not tex.endswith(('_NRM.dds', '_lightmap.dds')):
+                    print(f"  Found diffuse texture: {tex}")
+                    diffuse_maps.append(tex)
+        
+        # Create texture layers
+        print("\nPairing textures:")
+        for i in range(len(normal_maps)):
+            if i < len(diffuse_maps):
+                print(f"  Layer {i+1}: {diffuse_maps[i]} + {normal_maps[i]}")
+                textures['layers'].append((diffuse_maps[i], normal_maps[i]))
+                
+        print(f"\nFound {len(textures['layers'])} texture layers total")
+        return textures
+        
+    except Exception as e:
+        print(f"Error parsing material file: {e}")
+        return None
+
 def convert_cfg_to_otc(cfg_file):
     try:
         print(f"Converting {cfg_file} to otc format...")
@@ -17,6 +109,7 @@ def convert_cfg_to_otc(cfg_file):
         heightmap_image = None
         world_texture = None
         terrain_name = os.path.splitext(os.path.basename(cfg_file))[0]
+        custom_material = None
         
         with open(cfg_file, 'r') as f:
             for line in f:
@@ -42,6 +135,8 @@ def convert_cfg_to_otc(cfg_file):
                     max_height = line.split('=')[1]
                 elif 'MaxPixelError=' in line:
                     max_pixel_error = line.split('=')[1]
+                elif 'CustomMaterialName=' in line:
+                    custom_material = line.split('=')[1].strip()
         
         if not all([heightmap_size, heightmap_bpp, world_size_x, world_size_z, max_height]):
             print("Error: Missing required values in cfg file")
@@ -66,8 +161,45 @@ def convert_cfg_to_otc(cfg_file):
             f.write('LightmapEnabled=0\n')
             f.write('SpecularMappingEnabled=1\n')
             f.write('NormalMappingEnabled=1\n')
+        print(f"Created {otc_path}")
             
-        # Create page-0-0.otc file
+        # Create page files
+        if custom_material:
+            material_dir = os.path.dirname(cfg_file)
+            material_files = [f for f in os.listdir(material_dir) if f.endswith('.material')]
+            
+            material_textures = None
+            for mat_file in material_files:
+                material_textures = parse_etterrain_material(os.path.join(material_dir, mat_file), custom_material)
+                if material_textures:
+                    break
+                    
+            if material_textures:
+                # Create page file with custom material textures
+                page_path = os.path.join(os.path.dirname(cfg_file), f'{terrain_name}-page-0-0.otc')
+                with open(page_path, 'w') as f:
+                    f.write(f'{terrain_name}.raw\n')
+                    f.write(f'{len(material_textures["layers"])}\n')
+                    f.write('; worldSize, diffusespecular, normalheight, blendmap, blendmapmode, alpha\n')
+                    
+                    # Write each texture layer with proper formatting
+                    for i, (diffuse, normal) in enumerate(material_textures['layers']):
+                        blend_idx = i // 3  # Which RGB map to use
+                        rgb_channel = ['R', 'G', 'B'][i % 3]  # Which channel in the RGB map
+                        
+                        if blend_idx < len(material_textures['blendmaps']):
+                            blendmap = material_textures['blendmaps'][blend_idx]
+                            # Clean up texture names and remove any comments
+                            diffuse = diffuse.split('//')[0].strip()
+                            normal = normal.split('//')[0].strip()
+                            blendmap = blendmap.split('//')[0].strip()
+                            # Format with commas
+                            f.write(f'6, {diffuse}, {normal}, {blendmap}, {rgb_channel}, 0.99\n')
+                
+                print(f"Created {page_path}")
+                return True
+
+        # Create page-0-0.otc file for simple terrain
         page_path = os.path.join(os.path.dirname(cfg_file), f'{terrain_name}-page-0-0.otc')
         with open(page_path, 'w') as f:
             # Write heightmap filename
@@ -101,6 +233,7 @@ def convert_cfg_to_otc(cfg_file):
 def convert_terrn_to_terrn2(input_file):
     try:
         print(f"Converting {input_file} to terrn2 format...")
+        output_name = os.path.splitext(input_file)[0] + '.terrn2'
         
         terrain_name = ""
         ogre_cfg = ""
@@ -162,12 +295,47 @@ def convert_terrn_to_terrn2(input_file):
                 elif not line.startswith("//"):
                     objects.append(line)
 
-        # Create .tobj file
         tobj_name = os.path.splitext(ogre_cfg)[0] + ".tobj"
         output_dir = os.path.dirname(input_file)
         tobj_path = os.path.join(output_dir, tobj_name)
-        
+
         try:
+            # Create terrn2 file first
+            with open(output_name, 'w') as f:
+                f.write('[General]\n')
+                f.write(f'Name = {terrain_name}\n')
+                f.write(f'GeometryConfig = {os.path.splitext(ogre_cfg)[0]}.otc\n')
+                if water_height:
+                    f.write('Water=1\n')
+                    f.write(f'WaterLine = {water_height}\n')
+                else:
+                    f.write('Water=0\n')
+                f.write(f'AmbientColor = {water_color}\n')
+                f.write(f'StartPosition = {", ".join(start_position)}\n')
+                f.write('#CaelumConfigFile =\n')
+                f.write('SandStormCubeMap = tracks/skyboxcol\n')
+                f.write(f'Gravity = {gravity}\n')
+                f.write('CategoryID = 129\n')
+                f.write('Version = 1\n')
+                f.write(f'GUID = {str(uuid.uuid4())}\n')
+                if landuse_cfg:
+                    f.write(f'TractionMap = {landuse_cfg}\n')
+                f.write('\n\n')
+                
+                f.write('[Authors]\n')
+                for author_type, author_name in authors.items():
+                    f.write(f'{author_type} = {author_name}\n')
+                if not authors:
+                    f.write('terrain = unknown\n')
+                f.write(f'terrn2 = cm_terrn_converter\n\n')
+                
+                f.write(' \n[Objects]\n')
+                f.write(f'{tobj_name}=\n\n')
+                
+                f.write('[Scripts]\n')
+            print(f"Created {output_name}")
+
+            # Create .tobj file second
             with open(tobj_path, 'w') as f:
                 header_count = 0
                 found_first_object = False
@@ -207,54 +375,16 @@ def convert_terrn_to_terrn2(input_file):
                         f.write('\n')
 
             print(f"Created {tobj_path}")
-        except IOError as e:
-            print(f"Error creating {tobj_path}: {e}")
-            return False
-
-        # Also convert the cfg file if it exists
-        cfg_path = os.path.join(output_dir, ogre_cfg)
-        if os.path.exists(cfg_path):
-            convert_cfg_to_otc(cfg_path)
-
-        # Create .terrn2 file
-        output_name = os.path.splitext(input_file)[0] + '.terrn2'
-        try:
-            with open(output_name, 'w') as f:
-                f.write('[General]\n')
-                f.write(f'Name = {terrain_name}\n')
-                f.write(f'GeometryConfig = {os.path.splitext(ogre_cfg)[0]}.otc\n')
-                if water_height:
-                    f.write('Water=1\n')
-                    f.write(f'WaterLine = {water_height}\n')
-                else:
-                    f.write('Water=0\n')
-                f.write(f'AmbientColor = {water_color}\n')
-                f.write(f'StartPosition = {", ".join(start_position)}\n')
-                f.write('#CaelumConfigFile =\n')
-                f.write('SandStormCubeMap = tracks/skyboxcol\n')
-                f.write(f'Gravity = {gravity}\n')
-                f.write('CategoryID = 129\n')
-                f.write('Version = 1\n')
-                f.write(f'GUID = {str(uuid.uuid4())}\n')
-                if landuse_cfg:
-                    f.write(f'TractionMap = {landuse_cfg}\n')
-                f.write('\n\n')
+            
+            # Convert cfg file last
+            cfg_path = os.path.join(output_dir, ogre_cfg)
+            if os.path.exists(cfg_path):
+                convert_cfg_to_otc(cfg_path)
                 
-                f.write('[Authors]\n')
-                for author_type, author_name in authors.items():
-                    f.write(f'{author_type} = {author_name}\n')
-                if not authors:
-                    f.write('terrain = unknown\n')
-                f.write(f'terrn2 = cm_terrn_converter\n\n')
-                
-                f.write(' \n[Objects]\n')
-                f.write(f'{tobj_name}=\n\n')
-                
-                f.write('[Scripts]\n')
-            print(f"Created {output_name}")
             return True
+            
         except IOError as e:
-            print(f"Error creating {output_name}: {e}")
+            print(f"Error creating files: {e}")
             return False
             
     except Exception as e:
