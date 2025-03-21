@@ -13,6 +13,7 @@ def convert_cfg_to_otc(cfg_file):
         world_size_x = None
         world_size_z = None
         max_height = None
+        max_pixel_error = "0"
         terrain_name = os.path.splitext(os.path.basename(cfg_file))[0]
         
         with open(cfg_file, 'r') as f:
@@ -33,6 +34,8 @@ def convert_cfg_to_otc(cfg_file):
                     world_size_z = line.split('=')[1]
                 elif 'MaxHeight=' in line:
                     max_height = line.split('=')[1]
+                elif 'MaxPixelError=' in line:
+                    max_pixel_error = line.split('=')[1]
         
         if not all([heightmap_size, heightmap_bpp, world_size_x, world_size_z, max_height]):
             print("Error: Missing required values in cfg file")
@@ -53,7 +56,7 @@ def convert_cfg_to_otc(cfg_file):
             f.write('\n')
             f.write(f'PageFileFormat={terrain_name}-page-0-0.otc\n')
             f.write('\n')
-            f.write('MaxPixelError=0\n')
+            f.write(f'MaxPixelError={max_pixel_error}\n')
             f.write('LightmapEnabled=0\n')
             f.write('SpecularMappingEnabled=1\n')
             f.write('NormalMappingEnabled=1\n')
