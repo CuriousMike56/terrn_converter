@@ -239,6 +239,24 @@ def process_texture_with_gimp(input_texture, output_texture):
         print(f"Error processing texture with GIMP: {e}")
         print(f"GIMP stderr: {e.stderr}")
 
+def copy_default_textures(output_dir):
+    """Copy default terrain textures from textures folder to output directory"""
+    default_tex_dir = os.path.join(os.path.dirname(__file__), "textures")
+    default_textures = [
+        "blank_NRM.dds",
+        "terrain_detail_ds.dds",
+        "terrain_detail_dark_ds.dds",
+        "terrain_detail_nrm.dds"
+    ]
+    
+    for texture in default_textures:
+        src = os.path.join(default_tex_dir, texture)
+        dst = os.path.join(output_dir, texture)
+        if os.path.exists(src) and not os.path.exists(dst):
+            import shutil
+            shutil.copy2(src, dst)
+            print(f"Copied default texture: {texture}")
+
 def convert_cfg_to_otc(cfg_file):
     try:
         print(f"Converting {cfg_file} to otc format...")
@@ -355,6 +373,9 @@ def convert_cfg_to_otc(cfg_file):
                 process_texture_with_gimp(input_texture, os.path.join(os.path.dirname(cfg_file), base_texture))
             else:
                 base_texture = f'{terrain_name}_DS.dds'
+
+            # Copy default textures before creating the page file
+            copy_default_textures(os.path.dirname(cfg_file))
 
             # Create page-0-0.otc file for simple terrain
             page_path = os.path.join(os.path.dirname(cfg_file), f'{terrain_name}-page-0-0.otc')
