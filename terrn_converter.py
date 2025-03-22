@@ -329,7 +329,7 @@ def convert_cfg_to_otc(cfg_file):
                 # Create page file with processed textures
                 page_path = os.path.join(os.path.dirname(cfg_file), f'{terrain_name}-page-0-0.otc')
                 with open(page_path, 'w') as f:
-                    f.write(f'{terrain_name}.raw\n')
+                    f.write(f'{heightmap_image}\n')
                     f.write(f'{len(material_textures["layers"])}\n')
                     f.write('; worldSize, diffusespecular, normalheight, blendmap, blendmapmode, alpha\n')
                     
@@ -355,12 +355,8 @@ def convert_cfg_to_otc(cfg_file):
             # Create page-0-0.otc file for simple terrain
             page_path = os.path.join(os.path.dirname(cfg_file), f'{terrain_name}-page-0-0.otc')
             with open(page_path, 'w') as f:
-                # Write heightmap filename
-                if heightmap_image:
-                    f.write(f'{heightmap_image}\n')
-                else:
-                    f.write(f'{terrain_name}.raw\n')
-                    
+                f.write(f'{heightmap_image}\n')
+                
                 # Write number of texture layers
                 f.write('2\n')
                 
