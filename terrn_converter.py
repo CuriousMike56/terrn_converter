@@ -1,6 +1,7 @@
 import os
 import sys
 import uuid
+import subprocess  # For calling GIMP in batch mode
 
 def extract_texture_name(texture_line):
     """Extract texture filename from a texture_unit line"""
@@ -166,6 +167,74 @@ def parse_alphasplat_material(material_section):
 
     return textures
 
+def get_gimp_path():
+    """Find GIMP console executable in common installation locations."""
+    appdata_local = os.getenv('LOCALAPPDATA', '')
+    
+    possible_paths = [
+        r"C:\Program Files\GIMP 2\bin\gimp-console-2.10.exe",
+        os.path.join(appdata_local, r"Programs\GIMP 2\bin\gimp-console-2.10.exe"),
+        os.path.join(appdata_local, r"Programs\GIMP 3\bin\gimp-console.exe")
+    ]
+    
+    for path in possible_paths:
+        if os.path.exists(path):
+            return path
+            
+    raise FileNotFoundError("Could not find GIMP console executable")
+
+def process_texture_with_gimp(input_texture, output_texture):
+    """Process a texture using GIMP to add a black alpha mask and save as DDS with DXT5 compression."""
+    try:
+        # Escape file paths for GIMP
+        input_texture = input_texture.replace("\\", "/")
+        output_texture = output_texture.replace("\\", "/")
+        
+        # Get GIMP console path
+        gimp_console_path = get_gimp_path()
+        
+        # GIMP batch script with correct argument types
+        gimp_script = f"""
+        (let* ((image (car (gimp-file-load RUN-NONINTERACTIVE "{input_texture}" "{input_texture}")))
+               (drawable (car (gimp-image-get-active-layer image))))
+          (gimp-layer-add-alpha drawable)
+          (gimp-edit-fill drawable TRANSPARENT-FILL)
+          (file-dds-save 
+            RUN-NONINTERACTIVE  ; [1] run-mode
+            image              ; [2] image
+            drawable           ; [3] drawable
+            "{output_texture}" ; [4] filename
+            "{output_texture}" ; [5] raw-filename
+            0                  ; [6] format (auto)
+            1                  ; [7] mipmaps
+            0                  ; [8] save-type
+            0                  ; [9] compression
+            5                  ; [10] format-version (5 = DXT5)
+            0                  ; [11] transparent-index
+            0                  ; [12] coverage
+            0                  ; [13] use-perceptual-metric
+            0                  ; [14] alpha-test-threshold
+            0                  ; [15] color-metric-given
+            0                  ; [16] color-metric
+            0                  ; [17] alpha-dither
+            0)                ; [18] dither
+          (gimp-image-delete image))
+        """
+        
+        # Run GIMP in console mode
+        result = subprocess.run(
+            [gimp_console_path, "-i", "-b", gimp_script, "-b", "(gimp-quit 0)"],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+       # print(f"GIMP stderr: {result.stderr}")
+       # print(f"GIMP output: {result.stdout}")
+        print(f"Processed texture: {output_texture}")
+    except subprocess.CalledProcessError as e:
+        print(f"Error processing texture with GIMP: {e}")
+        print(f"GIMP stderr: {e.stderr}")
+
 def convert_cfg_to_otc(cfg_file):
     try:
         print(f"Converting {cfg_file} to otc format...")
@@ -248,56 +317,62 @@ def convert_cfg_to_otc(cfg_file):
                     break
                     
             if material_textures:
-                # Create page file with custom material textures
+                # Process diffuse textures through GIMP
+                processed_diffuse_textures = []
+                for diffuse, _ in material_textures['layers']:
+                    input_texture = os.path.join(os.path.dirname(cfg_file), diffuse)
+                    output_texture = os.path.splitext(input_texture)[0] + "_diffusespecular.dds"
+                    process_texture_with_gimp(input_texture, output_texture)
+                    # Store only the filename, not the full path
+                    processed_diffuse_textures.append(os.path.basename(output_texture))
+
+                # Create page file with processed textures
                 page_path = os.path.join(os.path.dirname(cfg_file), f'{terrain_name}-page-0-0.otc')
                 with open(page_path, 'w') as f:
                     f.write(f'{terrain_name}.raw\n')
                     f.write(f'{len(material_textures["layers"])}\n')
                     f.write('; worldSize, diffusespecular, normalheight, blendmap, blendmapmode, alpha\n')
                     
-                    # Write each texture layer with proper formatting
                     for i, (diffuse, normal) in enumerate(material_textures['layers']):
-                        blend_idx = i // 3  # Which RGB map to use
-                        rgb_channel = ['R', 'G', 'B'][i % 3]  # Which channel in the RGB map
-                        
+                        blend_idx = i // 3
+                        rgb_channel = ['R', 'G', 'B'][i % 3]
                         if blend_idx < len(material_textures['blendmaps']):
                             blendmap = material_textures['blendmaps'][blend_idx]
-                            # Clean up texture names and remove any comments
-                            diffuse = diffuse.split('//')[0].strip()
-                            normal = normal.split('//')[0].strip()
-                            blendmap = blendmap.split('//')[0].strip()
-                            # Format with commas
-                            f.write(f'6, {diffuse}, {normal}, {blendmap}, {rgb_channel}, 0.99\n')
+                            f.write(f'6, {processed_diffuse_textures[i]}, {normal}, {blendmap}, {rgb_channel}, 0.99\n')
                 
                 print(f"Created {page_path}")
                 return True
-
-        # Create page-0-0.otc file for simple terrain
-        page_path = os.path.join(os.path.dirname(cfg_file), f'{terrain_name}-page-0-0.otc')
-        with open(page_path, 'w') as f:
-            # Write heightmap filename
-            if heightmap_image:
-                f.write(f'{heightmap_image}\n')
-            else:
-                f.write(f'{terrain_name}.raw\n')
-                
-            # Write number of texture layers
-            f.write('2\n')
-            
-            # Write base layer
+        else:
+            # Process the base diffuse texture for simple terrain
             if world_texture:
                 base_name, ext = os.path.splitext(world_texture)
-                base_texture = f"{base_name}_DS.dds"
+                input_texture = os.path.join(os.path.dirname(cfg_file), world_texture)
+                base_texture = f"{base_name}_diffusespecular.dds"  # Just the filename
+                process_texture_with_gimp(input_texture, os.path.join(os.path.dirname(cfg_file), base_texture))
             else:
                 base_texture = f'{terrain_name}_DS.dds'
-            f.write(f'; worldSize, diffusespecular, normalheight, blendmap, blendmapmode, alpha\n')
-            f.write(f'{world_size_x}, {base_texture}, blank_NRM.dds\n')
-            
-            # Write detail layer
-            f.write('10, terrain_detail_dark_ds.dds, terrain_detail_nrm.dds, terrain_detail_rgb.png, R, 0.8\n')
 
-        print(f"Created {page_path}")
-        return True
+            # Create page-0-0.otc file for simple terrain
+            page_path = os.path.join(os.path.dirname(cfg_file), f'{terrain_name}-page-0-0.otc')
+            with open(page_path, 'w') as f:
+                # Write heightmap filename
+                if heightmap_image:
+                    f.write(f'{heightmap_image}\n')
+                else:
+                    f.write(f'{terrain_name}.raw\n')
+                    
+                # Write number of texture layers
+                f.write('2\n')
+                
+                # Write base layer
+                f.write(f'; worldSize, diffusespecular, normalheight, blendmap, blendmapmode, alpha\n')
+                f.write(f'{world_size_x}, {base_texture}, blank_NRM.dds\n')
+                
+                # Write detail layer
+                f.write('10, terrain_detail_dark_ds.dds, terrain_detail_nrm.dds, terrain_detail_rgb.png, R, 0.8\n')
+
+            print(f"Created {page_path}")
+            return True
         
     except Exception as e:
         print(f"Error converting cfg file: {e}")
