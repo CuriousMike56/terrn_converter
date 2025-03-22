@@ -31,35 +31,34 @@ def parse_etterrain_material(material_file, material_name):
             print("Material not found in file")
             return None
             
-        print("Found material, checking if it's an ETTerrain material...")
+        print("Found material, checking type...")
             
         # Get the actual material section using the found position
         material_section = content[material_start:]
         material_end = material_section.find("\nmaterial ")
         if material_end != -1:
             material_section = material_section[:material_end]
+
+        # Check for material inheritance
+        if ": AlphaSplatTerrain" in material_section:
+            print("Found AlphaSplatTerrain material, extracting textures...")
+            return parse_alphasplat_material(material_section)
             
-        # Check only this specific material for ET identifiers
+        # Check for ETTerrain identifiers
         et_identifiers = [
-            "et/program",  # Will match ET/Programs, ET/Program/, etc.
-            "etterrain",   # Will match ETTerrain in any case
-            "etambient"    # Will match ETAmbient in any case
+            "et/program",
+            "etterrain",
+            "etambient"
         ]
         
-        # Check the material name and its section content
         material_text = f"{material_name} {material_section}".lower()
-        
-        is_et_material = False
-        for identifier in et_identifiers:
-            if identifier in material_text:
-                is_et_material = True
-                break
+        is_et_material = any(id in material_text for id in et_identifiers)
                 
         if not is_et_material:
-            print("Not an ETTerrain material (looking for ET/Program, ETTerrain, or ETAmbient)")
+            print("Not a supported terrain material type")
             return None
 
-        print("Found valid ETTerrain material, extracting textures...")
+        print("Found ETTerrain material, extracting textures...")
         textures = {
             'blendmaps': [],
             'layers': []
@@ -113,6 +112,59 @@ def parse_etterrain_material(material_file, material_name):
     except Exception as e:
         print(f"Error parsing material file: {e}")
         return None
+
+def parse_alphasplat_material(material_section):
+    """Parse an AlphaSplatTerrain material definition"""
+    textures = {
+        'blendmaps': [],
+        'layers': []
+    }
+    
+    # Extract alpha masks
+    fp_section = material_section[material_section.find("fragment_program_ref AlphaSplatTerrain/FP"):] 
+    fp_end = fp_section.find("}")
+    fp_section = fp_section[:fp_end]
+    
+    alpha0_mask = [1,1,1,0]  # Default mask
+    alpha1_mask = [1,1,1,0]  # Default mask
+    
+    if "alpha0Mask" in fp_section:
+        alpha0_line = fp_section[fp_section.find("alpha0Mask"):].split('\n')[0]
+        alpha0_mask = [float(x) for x in alpha0_line.split("float4")[1].strip().split()]
+    if "alpha1Mask" in fp_section:
+        alpha1_line = fp_section[fp_section.find("alpha1Mask"):].split('\n')[0]
+        alpha1_mask = [float(x) for x in alpha1_line.split("float4")[1].strip().split()]
+
+    # Get blend maps
+    for i, line in enumerate(material_section.split('\n')):
+        if 'set_texture_alias AlphaMap' in line:
+            tex = line.split()[2].strip()
+            textures['blendmaps'].append(tex)
+
+    # Get splat textures and pair with blank normal maps
+    splat_count = 8
+    splats = []
+    for i in range(1, splat_count + 1):
+        for line in material_section.split('\n'):
+            if f'set_texture_alias Splat{i}' in line:
+                tex = line.split()[2].strip()
+                splats.append(tex)
+                break
+
+    # Create texture layers based on enabled alpha channels
+    for i, (splat, enabled) in enumerate(zip(splats[:4], alpha0_mask)):
+        if enabled == 1:
+            blend_map = textures['blendmaps'][0]
+            rgb_channel = ['R', 'G', 'B', 'A'][i]
+            textures['layers'].append((splat, 'blank_NRM.dds'))
+            
+    for i, (splat, enabled) in enumerate(zip(splats[4:], alpha1_mask)):
+        if enabled == 1:
+            blend_map = textures['blendmaps'][1]
+            rgb_channel = ['R', 'G', 'B', 'A'][i]
+            textures['layers'].append((splat, 'blank_NRM.dds'))
+
+    return textures
 
 def convert_cfg_to_otc(cfg_file):
     try:
