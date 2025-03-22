@@ -127,7 +127,7 @@ def parse_alphasplat_material(material_section):
     fp_section = fp_section[:fp_end]
     
     alpha0_mask = [1,1,1,0]  # Default mask
-    alpha1_mask = [1,1,1,0]  # Default mask
+    alpha1_mask = [1,1,1,0]
     
     if "alpha0Mask" in fp_section:
         alpha0_line = fp_section[fp_section.find("alpha0Mask"):].split('\n')[0]
@@ -392,6 +392,7 @@ def convert_terrn_to_terrn2(input_file):
         authors = {}
         gravity = "-9.81"
         landuse_cfg = None
+        has_caelum = False
         
         with open(input_file, 'r') as f:
             lines = f.readlines()
@@ -428,6 +429,11 @@ def convert_terrn_to_terrn2(input_file):
                     landuse_cfg = line.split(" ")[1]
                     continue
                     
+                # Check for caelum config
+                if line.startswith("caelumconfig"):
+                    has_caelum = True
+                    continue
+                    
                 # First 5 lines are header info
                 if not terrain_name:
                     terrain_name = line
@@ -460,7 +466,10 @@ def convert_terrn_to_terrn2(input_file):
                     f.write('Water=0\n')
                 f.write(f'AmbientColor = {water_color}\n')
                 f.write(f'StartPosition = {", ".join(start_position)}\n')
-                f.write('#CaelumConfigFile =\n')
+                if has_caelum:
+                    f.write(f'CaelumConfigFile = {os.path.basename(input_file)}.os\n')
+                else:
+                    f.write('#CaelumConfigFile =\n')
                 f.write('SandStormCubeMap = tracks/skyboxcol\n')
                 f.write(f'Gravity = {gravity}\n')
                 f.write('CategoryID = 129\n')
