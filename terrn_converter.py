@@ -439,6 +439,8 @@ def convert_terrn_to_terrn2(input_file):
                     terrain_name = line
                 elif not ogre_cfg:
                     ogre_cfg = line
+                elif line == "caelum":  # Skip the caelum keyword if it's the third line
+                    continue
                 elif line.startswith("w "):
                     water_height = line.split(" ")[1]
                 elif not water_color:
