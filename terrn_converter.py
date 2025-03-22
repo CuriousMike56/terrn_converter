@@ -173,8 +173,7 @@ def get_gimp_path():
     
     possible_paths = [
         r"C:\Program Files\GIMP 2\bin\gimp-console-2.10.exe",
-        os.path.join(appdata_local, r"Programs\GIMP 2\bin\gimp-console-2.10.exe"),
-        os.path.join(appdata_local, r"Programs\GIMP 3\bin\gimp-console.exe")
+        os.path.join(appdata_local, r"Programs\GIMP 2\bin\gimp-console-2.10.exe")
     ]
     
     for path in possible_paths:
@@ -185,6 +184,11 @@ def get_gimp_path():
 
 def process_texture_with_gimp(input_texture, output_texture):
     """Process a texture using GIMP to add a black alpha mask and save as DDS with DXT5 compression."""
+    # Check if output texture already exists
+    if os.path.exists(output_texture):
+        print(f"Using existing processed texture: {output_texture}")
+        return True
+        
     try:
         # Escape file paths for GIMP
         input_texture = input_texture.replace("\\", "/")
