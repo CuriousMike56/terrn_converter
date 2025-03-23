@@ -239,6 +239,37 @@ def process_texture_with_gimp(input_texture, output_texture):
         print(f"Error processing texture with GIMP: {e}")
         print(f"GIMP stderr: {e.stderr}")
 
+def convert_dds_to_png(input_texture, output_texture):
+    """Convert DDS texture to PNG using GIMP"""
+    if os.path.exists(output_texture):
+        print(f"Using existing converted texture: {output_texture}")
+        return True
+        
+    try:
+        input_texture = input_texture.replace("\\", "/")
+        output_texture = output_texture.replace("\\", "/")
+        gimp_console_path = get_gimp_path()
+        
+        gimp_script = f"""
+        (let* ((image (car (gimp-file-load RUN-NONINTERACTIVE "{input_texture}" "{input_texture}")))
+               (drawable (car (gimp-image-get-active-layer image))))
+          (file-png-save-defaults RUN-NONINTERACTIVE image drawable "{output_texture}" "{output_texture}")
+          (gimp-image-delete image))
+        """
+        
+        result = subprocess.run(
+            [gimp_console_path, "-i", "-b", gimp_script, "-b", "(gimp-quit 0)"],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        print(f"Converted texture to PNG: {output_texture}")
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"Error converting texture to PNG: {e}")
+        print(f"GIMP stderr: {e.stderr}")
+        return False
+
 def copy_default_textures(output_dir):
     """Copy default terrain textures from textures folder to output directory"""
     default_tex_dir = os.path.join(os.path.dirname(__file__), "textures")
@@ -348,6 +379,9 @@ def convert_cfg_to_otc(cfg_file):
                     # Store only the filename, not the full path
                     processed_diffuse_textures.append(os.path.basename(output_texture))
 
+                # Ensure blank_NRM.dds is available
+                copy_default_textures(os.path.dirname(cfg_file))
+
                 # Create page file with processed textures
                 page_path = os.path.join(os.path.dirname(cfg_file), f'{terrain_name}-page-0-0.otc')
                 with open(page_path, 'w') as f:
@@ -370,9 +404,16 @@ def convert_cfg_to_otc(cfg_file):
                 base_name, ext = os.path.splitext(world_texture)
                 input_texture = os.path.join(os.path.dirname(cfg_file), world_texture)
                 base_texture = f"{base_name}_diffusespecular.dds"  # Just the filename
-                process_texture_with_gimp(input_texture, os.path.join(os.path.dirname(cfg_file), base_texture))
+                base_texture_path = os.path.join(os.path.dirname(cfg_file), base_texture)
+                process_texture_with_gimp(input_texture, base_texture_path)
+                
+                # Convert base texture to PNG for detail layer
+                detail_texture = f"{base_name}.png"
+                detail_texture_path = os.path.join(os.path.dirname(cfg_file), detail_texture)
+                convert_dds_to_png(input_texture, detail_texture_path)
             else:
                 base_texture = f'{terrain_name}_DS.dds'
+                detail_texture = f'{terrain_name}.png'
 
             # Copy default textures before creating the page file
             copy_default_textures(os.path.dirname(cfg_file))
@@ -389,8 +430,8 @@ def convert_cfg_to_otc(cfg_file):
                 f.write(f'; worldSize, diffusespecular, normalheight, blendmap, blendmapmode, alpha\n')
                 f.write(f'{world_size_x}, {base_texture}, blank_NRM.dds\n')
                 
-                # Write detail layer
-                f.write('10, terrain_detail_dark_ds.dds, terrain_detail_nrm.dds, terrain_detail_rgb.png, R, 0.8\n')
+                # Write detail layer with converted texture
+                f.write('10, terrain_detail_dark_ds.dds, terrain_detail_nrm.dds, ' + detail_texture + ', R, 0.8\n')
 
             print(f"Created {page_path}")
             return True
