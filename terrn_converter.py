@@ -1,6 +1,7 @@
 import os
 import sys
 import uuid
+import argparse
 import subprocess  # For calling GIMP in batch mode
 
 def extract_texture_name(texture_line):
@@ -288,9 +289,18 @@ def copy_default_textures(output_dir):
             shutil.copy2(src, dst)
             print(f"Copied default texture: {texture}")
 
-def convert_cfg_to_otc(cfg_file):
+def convert_cfg_to_otc(cfg_file, output_name=None):
+    """Convert .cfg to .otc format"""
     try:
         print(f"Converting {cfg_file} to otc format...")
+        
+        # Use custom output name if provided, otherwise use input name
+        if output_name:
+            terrain_name = output_name
+            otc_path = os.path.join(os.path.dirname(cfg_file), f'{output_name}.otc')
+        else:
+            terrain_name = os.path.splitext(os.path.basename(cfg_file))[0]
+            otc_path = os.path.splitext(cfg_file)[0] + '.otc'
         
         # Read values from .cfg
         heightmap_size = None
@@ -302,7 +312,6 @@ def convert_cfg_to_otc(cfg_file):
         max_pixel_error = "0"
         heightmap_image = None
         world_texture = None
-        terrain_name = os.path.splitext(os.path.basename(cfg_file))[0]
         custom_material = None
         
         with open(cfg_file, 'r') as f:
@@ -337,7 +346,6 @@ def convert_cfg_to_otc(cfg_file):
             return False
             
         # Create main .otc file
-        otc_path = os.path.splitext(cfg_file)[0] + '.otc'
         with open(otc_path, 'w') as f:
             f.write(f'Heightmap.0.0.raw.size={heightmap_size}\n')
             f.write(f'Heightmap.0.0.raw.bpp={heightmap_bpp}\n')
@@ -440,10 +448,21 @@ def convert_cfg_to_otc(cfg_file):
         print(f"Error converting cfg file: {e}")
         return False
 
-def convert_terrn_to_terrn2(input_file):
+def convert_terrn_to_terrn2(input_file, output_name=None, display_name=None):
+    """Convert .terrn to .terrn2 format"""
     try:
         print(f"Converting {input_file} to terrn2 format...")
-        output_name = os.path.splitext(input_file)[0] + '.terrn2'
+        
+        # Use custom output name if provided
+        if output_name:
+            output_path = os.path.join(os.path.dirname(input_file), f'{output_name}.terrn2')
+            tobj_name = f"{output_name}.tobj"
+            cfg_name = f"{output_name}.otc"
+        else:
+            output_path = os.path.splitext(input_file)[0] + '.terrn2'
+            output_name = os.path.splitext(os.path.basename(input_file))[0]
+            tobj_name = os.path.splitext(os.path.basename(input_file))[0] + ".tobj"
+            cfg_name = os.path.splitext(os.path.basename(input_file))[0] + ".otc"
         
         terrain_name = ""
         ogre_cfg = ""
@@ -519,10 +538,11 @@ def convert_terrn_to_terrn2(input_file):
 
         try:
             # Create terrn2 file first
-            with open(output_name, 'w') as f:
+            with open(output_path, 'w') as f:
                 f.write('[General]\n')
-                f.write(f'Name = {terrain_name}\n')
-                f.write(f'GeometryConfig = {os.path.splitext(ogre_cfg)[0]}.otc\n')
+                # Use custom display name if provided, otherwise use terrain name from file
+                f.write(f'Name = {display_name if display_name else terrain_name}\n')
+                f.write(f'GeometryConfig = {cfg_name}\n')
                 if water_height:
                     f.write('Water=1\n')
                     f.write(f'WaterLine = {water_height}\n')
@@ -554,7 +574,7 @@ def convert_terrn_to_terrn2(input_file):
                 f.write(f'{tobj_name}=\n\n')
                 
                 f.write('[Scripts]\n')
-            print(f"Created {output_name}")
+            print(f"Created {output_path}")
 
             # Create .tobj file second
             with open(tobj_path, 'w') as f:
@@ -600,7 +620,7 @@ def convert_terrn_to_terrn2(input_file):
             # Convert cfg file last
             cfg_path = os.path.join(output_dir, ogre_cfg)
             if os.path.exists(cfg_path):
-                convert_cfg_to_otc(cfg_path)
+                convert_cfg_to_otc(cfg_path, output_name)
                 
             return True
             
@@ -613,11 +633,37 @@ def convert_terrn_to_terrn2(input_file):
         return False
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Usage: python terrn_converter.py filename.terrn")
+    if '-help' in sys.argv:
+        sys.argv[sys.argv.index('-help')] = '--help'
+        
+    parser = argparse.ArgumentParser(
+        description='Converts a legacy Rigs of Rods 0.3x terrain from .terrn to 0.4+ .terrn2 format',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog='''
+Examples:
+  %(prog)s terrain.terrn                         # Basic conversion
+  %(prog)s terrain.terrn -o newname              # Convert with custom output name
+  %(prog)s terrain.terrn -n "Display Name"       # Convert with custom display name
+
+The converter:
+  - Converts .terrn to .terrn2 format
+  - Copies objects to .tobj file
+  - Converts .cfg to .otc format
+  - Supports ETTerrain and AlphaSplatTerrain materials
+  - Processes textures with GIMP 2.10 (will not overwrite existing textures)
+  - Copies default textures if required
+''')
+    parser.add_argument('input_file', help='Input .terrn file to convert')
+    parser.add_argument('-o', '--output', help='Custom output filename (without extension) for all generated files')
+    parser.add_argument('-n', '--name', help='Custom display name shown in terrain selector')
+    
+    args = parser.parse_args()
+    
+    if not args.input_file.endswith('.terrn'):
+        print("Error: Input file must be a .terrn file")
         sys.exit(1)
         
-    success = convert_terrn_to_terrn2(sys.argv[1])
+    success = convert_terrn_to_terrn2(args.input_file, args.output, args.name)
     if success:
         print("Terrain conversion completed successfully!")
     else:
