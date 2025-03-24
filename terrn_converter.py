@@ -50,6 +50,21 @@ def parse_etterrain_material(material_file, material_name):
             print("Found AlphaSplatTerrain material, extracting textures...")
             return parse_alphasplat_material(material_section)
             
+        # Check if this material inherits from ETTerrainMaterial
+        inherited = False
+        if ": ETTerrainMaterial" in material_section:
+            print("Found ETTerrainMaterial child material, extracting texture aliases...")
+            inherited = True
+            # Get base material section
+            base_mat_start = content.find("material ETTerrainMaterial")
+            if base_mat_start != -1:
+                base_mat_section = content[base_mat_start:]
+                base_mat_end = base_mat_section.find("\nmaterial ")
+                if base_mat_end != -1:
+                    base_mat_section = base_mat_section[:base_mat_end]
+                # Combine base and child sections for parsing
+                material_section = base_mat_section + "\n" + material_section
+        
         # Check for ETTerrain identifiers
         et_identifiers = [
             "et/program",
@@ -57,8 +72,8 @@ def parse_etterrain_material(material_file, material_name):
             "etambient"
         ]
         
-        material_text = f"{material_name} {material_section}".lower()
-        is_et_material = any(id in material_text for id in et_identifiers)
+        material_text = material_section.lower()
+        is_et_material = inherited or any(id in material_text for id in et_identifiers)
                 
         if not is_et_material:
             print("Not a supported terrain material type")
@@ -69,49 +84,74 @@ def parse_etterrain_material(material_file, material_name):
             'blendmaps': [],
             'layers': []
         }
-        
-        # Find Lighting and Splatting passes
-        print("\nExtracting texture information:")
-        lighting_pass = material_section[material_section.find("pass Lighting"):material_section.find("pass Splatting")]
-        splatting_pass = material_section[material_section.find("pass Splatting"):material_section.find("pass", material_section.find("pass Splatting") + 1)]
-        
-        # Extract RGB blendmaps
-        print("\nProcessing blendmaps:")
-        texture_units = lighting_pass.split('texture_unit')
-        for unit in texture_units[1:4]:
-            if '_RGB' in unit:
-                tex = extract_texture_name(unit)
-                print(f"  Found blendmap: {tex}")
-                textures['blendmaps'].append(tex)
-                
-        # Get normal maps
-        print("\nProcessing normal maps:")
-        normal_maps = []
-        for unit in texture_units[4:]:
-            if '_NRM' in unit:
-                tex = extract_texture_name(unit)
-                if tex:
-                    print(f"  Found normal map: {tex}")
-                    normal_maps.append(tex)
+
+        if inherited:
+            # Process inherited material using texture aliases
+            aliases = {}
+            for line in material_section.split('\n'):
+                if 'set_texture_alias' in line:
+                    parts = line.split()
+                    if len(parts) >= 3:
+                        alias_name = parts[1].strip()
+                        texture_name = parts[2].strip()
+                        aliases[alias_name] = texture_name
+                        
+            # Get RGB blend maps
+            for i in range(1, 4):
+                rgbmap = aliases.get(f'RGBMap{i}')
+                if rgbmap:
+                    print(f"  Found blendmap: {rgbmap}")
+                    textures['blendmaps'].append(rgbmap)
+            
+            # Get texture layers
+            print("\nProcessing texture layers:")
+            for i in range(1, 4):  # For each RGB map
+                for color in ['R', 'G', 'B']:  # For each color channel
+                    diffuse = aliases.get(f'{color}Map{i}_DIF')
+                    normal = aliases.get(f'{color}Map{i}_NRM')
+                    if diffuse and normal:
+                        print(f"  Layer {len(textures['layers'])+1}: {diffuse} + {normal}")
+                        textures['layers'].append((diffuse, normal))
+        else:
+            # Original ETTerrain material processing
+            # Find Lighting and Splatting passes
+            print("\nExtracting texture information:")
+            lighting_pass = material_section[material_section.find("pass Lighting"):material_section.find("pass Splatting")]
+            splatting_pass = material_section[material_section.find("pass Splatting"):material_section.find("pass", material_section.find("pass Splatting") + 1)]
+            
+            # Extract RGB blendmaps
+            print("\nProcessing blendmaps:")
+            texture_units = lighting_pass.split('texture_unit')
+            for unit in texture_units[1:4]:
+                if '_RGB' in unit:
+                    tex = extract_texture_name(unit)
+                    if tex:
+                        print(f"  Found blendmap: {tex}")
+                        textures['blendmaps'].append(tex)
                     
-        # Get diffuse textures
-        print("\nProcessing diffuse textures:")
-        diffuse_maps = []
-        splatting_units = splatting_pass.split('texture_unit')
-        for unit in splatting_units[4:]:
-            if 'texture' in unit and not '_RGB' in unit:
-                tex = extract_texture_name(unit)
-                if tex and not tex.endswith(('_NRM.dds', '_lightmap.dds')):
-                    print(f"  Found diffuse texture: {tex}")
-                    diffuse_maps.append(tex)
-        
-        # Create texture layers
-        print("\nPairing textures:")
-        for i in range(len(normal_maps)):
-            if i < len(diffuse_maps):
-                print(f"  Layer {i+1}: {diffuse_maps[i]} + {normal_maps[i]}")
-                textures['layers'].append((diffuse_maps[i], normal_maps[i]))
-                
+            # Get normal maps and diffuse textures
+            print("\nProcessing texture layers:")
+            normal_maps = []
+            for unit in texture_units[4:]:
+                if '_NRM' in unit:
+                    tex = extract_texture_name(unit)
+                    if tex:
+                        normal_maps.append(tex)
+
+            diffuse_maps = []
+            splatting_units = splatting_pass.split('texture_unit')
+            for unit in splatting_units[4:]:
+                if 'texture' in unit and not '_RGB' in unit:
+                    tex = extract_texture_name(unit)
+                    if tex and not tex.endswith(('_NRM.dds', '_lightmap.dds')):
+                        diffuse_maps.append(tex)
+
+            # Create texture layers
+            for i in range(len(normal_maps)):
+                if i < len(diffuse_maps):
+                    print(f"  Layer {i+1}: {diffuse_maps[i]} + {normal_maps[i]}")
+                    textures['layers'].append((diffuse_maps[i], normal_maps[i]))
+
         print(f"\nFound {len(textures['layers'])} texture layers total")
         return textures
         
@@ -384,10 +424,10 @@ def convert_cfg_to_otc(cfg_file, output_name=None):
                     break
                     
             if material_textures:
-                # Add warning if more than 5 texture layers
+                # Show warning if more than 5 texture layers
                 if len(material_textures['layers']) > 5:
                     print(f"\n{YELLOW}WARNING: This terrain features more than 5 texture layers. "
-                          "Texture layers WILL BE MISSING as RoR only supports 5 layers (6 without shadows)!{ENDC}")
+                          f"Texture layers WILL BE MISSING as RoR only supports 5 layers (6 without shadows)!{ENDC}")
                 
                 # Process diffuse textures through GIMP
                 processed_diffuse_textures = []
