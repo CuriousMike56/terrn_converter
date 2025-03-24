@@ -187,10 +187,10 @@ def process_texture_with_gimp(input_texture, output_texture):
     """Process a texture using GIMP to add a black alpha mask and save as DDS with DXT5 compression."""
     # Check if output texture already exists
     if os.path.exists(output_texture):
-        print(f"Using existing processed texture: {output_texture}")
+        print(f"Using existing converted texture: {output_texture}")
         return True
         
-    print(f"Processing texture: {input_texture}")
+    print(f"Converting texture to DDS with alpha mask: {input_texture}")
     try:
         # Escape file paths for GIMP
         input_texture = input_texture.replace("\\", "/")
@@ -236,9 +236,9 @@ def process_texture_with_gimp(input_texture, output_texture):
         )
        # print(f"GIMP stderr: {result.stderr}")
        # print(f"GIMP output: {result.stdout}")
-        print(f"Processed texture: {output_texture}")
+        print(f"Converted texture: {output_texture}")
     except subprocess.CalledProcessError as e:
-        print(f"Error processing texture with GIMP: {e}")
+        print(f"Error converting texture with GIMP: {e}")
         print(f"GIMP stderr: {e.stderr}")
 
 def convert_dds_to_png(input_texture, output_texture):
@@ -247,7 +247,7 @@ def convert_dds_to_png(input_texture, output_texture):
         print(f"Using existing converted texture: {output_texture}")
         return True
         
-    print(f"Processing texture: {input_texture}")
+    print(f"Converting texture to PNG for use in page file: {input_texture}")
     try:
         input_texture = input_texture.replace("\\", "/")
         output_texture = output_texture.replace("\\", "/")
@@ -581,7 +581,13 @@ def convert_terrn_to_terrn2(input_file, output_name=None, display_name=None):
                 f.write(' \n[Objects]\n')
                 f.write(f'{tobj_name}=\n\n')
                 
+                # Check for angelscript file
                 f.write('[Scripts]\n')
+                as_script = input_file + '.as'
+                if os.path.exists(as_script):
+                    script_name = os.path.basename(as_script)
+                    f.write(f'{script_name}=\n')
+
             print(f"Created {output_path}")
 
             # Create .tobj file second
