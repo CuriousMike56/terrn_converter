@@ -190,6 +190,7 @@ def process_texture_with_gimp(input_texture, output_texture):
         print(f"Using existing processed texture: {output_texture}")
         return True
         
+    print(f"Processing texture: {input_texture}")
     try:
         # Escape file paths for GIMP
         input_texture = input_texture.replace("\\", "/")
@@ -246,6 +247,7 @@ def convert_dds_to_png(input_texture, output_texture):
         print(f"Using existing converted texture: {output_texture}")
         return True
         
+    print(f"Processing texture: {input_texture}")
     try:
         input_texture = input_texture.replace("\\", "/")
         output_texture = output_texture.replace("\\", "/")
