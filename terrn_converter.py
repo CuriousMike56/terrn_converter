@@ -4,6 +4,10 @@ import uuid
 import argparse
 import subprocess  # For calling GIMP in batch mode
 
+# ANSI color codes
+YELLOW = '\033[93m'
+ENDC = '\033[0m'
+
 def extract_texture_name(texture_line):
     """Extract texture filename from a texture_unit line"""
     # Skip comment lines
@@ -380,6 +384,11 @@ def convert_cfg_to_otc(cfg_file, output_name=None):
                     break
                     
             if material_textures:
+                # Add warning if more than 5 texture layers
+                if len(material_textures['layers']) > 5:
+                    print(f"\n{YELLOW}WARNING: This terrain features more than 5 texture layers. "
+                          "Texture layers WILL BE MISSING as RoR only supports 5 layers (6 without shadows)!{ENDC}")
+                
                 # Process diffuse textures through GIMP
                 processed_diffuse_textures = []
                 for diffuse, _ in material_textures['layers']:
