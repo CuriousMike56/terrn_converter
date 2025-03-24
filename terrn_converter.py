@@ -474,6 +474,7 @@ def convert_terrn_to_terrn2(input_file, output_name=None, display_name=None):
         gravity = "-9.81"
         landuse_cfg = None
         has_caelum = False
+        sandstorm_cubemap = "tracks/skyboxcol"  # Default value
         
         with open(input_file, 'r') as f:
             lines = f.readlines()
@@ -508,6 +509,11 @@ def convert_terrn_to_terrn2(input_file, output_name=None, display_name=None):
                 # Extract landuse config
                 if line.startswith("landuse-config "):
                     landuse_cfg = line.split(" ")[1]
+                    continue
+                    
+                # Check for sandstorm cubemap
+                if line.lower().startswith("sandstormcubemap "):
+                    sandstorm_cubemap = line.split(" ", 1)[1]
                     continue
                     
                 # Check for caelum config
@@ -554,7 +560,7 @@ def convert_terrn_to_terrn2(input_file, output_name=None, display_name=None):
                     f.write(f'CaelumConfigFile = {os.path.basename(input_file)}.os\n')
                 else:
                     f.write('#CaelumConfigFile =\n')
-                f.write('SandStormCubeMap = tracks/skyboxcol\n')
+                f.write(f'SandStormCubeMap = {sandstorm_cubemap}\n')
                 f.write(f'Gravity = {gravity}\n')
                 f.write('CategoryID = 129\n')
                 f.write('Version = 1\n')
@@ -568,7 +574,7 @@ def convert_terrn_to_terrn2(input_file, output_name=None, display_name=None):
                     f.write(f'{author_type} = {author_name}\n')
                 if not authors:
                     f.write('terrain = unknown\n')
-                f.write(f'terrn2 = cm_terrn_converter\n\n')
+                f.write(f'terrn2 = CM_terrn_converter\n\n')
                 
                 f.write(' \n[Objects]\n')
                 f.write(f'{tobj_name}=\n\n')
@@ -606,7 +612,8 @@ def convert_terrn_to_terrn2(input_file, output_name=None, display_name=None):
                     # Skip caelumconfig and landuse-config lines
                     line = obj.strip()
                     if (line.startswith('caelumconfig') or
-                        line.startswith('landuse-config')):
+                        line.startswith('landuse-config') or
+                        line.lower().startswith('sandstormcubemap')):
                         continue
                     
                     # Write everything else as-is, except 'end' keyword
