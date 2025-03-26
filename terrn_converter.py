@@ -453,7 +453,7 @@ def convert_cfg_to_otc(cfg_file, output_name=None):
                         rgb_channel = ['R', 'G', 'B'][i % 3]
                         if blend_idx < len(material_textures['blendmaps']):
                             blendmap = material_textures['blendmaps'][blend_idx]
-                            f.write(f'6, {processed_diffuse_textures[i]}, {normal}, {blendmap}, {rgb_channel}, 0.99\n')
+                            f.write(f'6, {processed_diffuse_textures[i]}, {normal}, {blendmap}, {rgb_channel}, 1.0\n')
                 
                 print(f"Created {page_path}")
                 return True
