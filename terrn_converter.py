@@ -514,7 +514,7 @@ def convert_terrn_to_terrn2(input_file, output_name=None, display_name=None):
             output_name = os.path.splitext(os.path.basename(input_file))[0]
             tobj_name = os.path.splitext(os.path.basename(input_file))[0] + ".tobj"
             cfg_name = os.path.splitext(os.path.basename(input_file))[0] + ".otc"
-        
+
         terrain_name = ""
         ogre_cfg = ""
         water_height = None
@@ -589,7 +589,6 @@ def convert_terrn_to_terrn2(input_file, output_name=None, display_name=None):
                 elif not line.startswith("//"):
                     objects.append(line)
 
-        tobj_name = os.path.splitext(ogre_cfg)[0] + ".tobj"
         output_dir = os.path.dirname(input_file)
         tobj_path = os.path.join(output_dir, tobj_name)
 
@@ -707,15 +706,7 @@ if __name__ == "__main__":
 Examples:
   %(prog)s terrain.terrn                         # Basic conversion
   %(prog)s terrain.terrn -o newname              # Convert with custom output name
-  %(prog)s terrain.terrn -n "Display Name"       # Convert with custom display name
-
-The converter:
-  - Converts .terrn to .terrn2 format
-  - Copies objects to .tobj file
-  - Converts .cfg to .otc format
-  - Supports ETTerrain and AlphaSplatTerrain materials
-  - Processes textures with GIMP 2.10 (will not overwrite existing textures)
-  - Copies default textures if required
+  %(prog)s terrain.terrn -n "Display Name"       # Convert with custom display name shown in terrain selector
 ''')
     parser.add_argument('input_file', help='Input .terrn file to convert')
     parser.add_argument('-o', '--output', help='Custom output filename (without extension) for all generated files')
