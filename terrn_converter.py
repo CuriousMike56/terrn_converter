@@ -700,17 +700,17 @@ if __name__ == "__main__":
         sys.argv[sys.argv.index('-help')] = '--help'
         
     parser = argparse.ArgumentParser(
-        description='Converts a legacy Rigs of Rods 0.3x terrain from .terrn to 0.4+ .terrn2 format',
+        description='Converts a legacy Rigs of Rods terrain (0.39 and older) to terrn2 (0.4+) format',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog='''
 Examples:
   %(prog)s terrain.terrn                         # Basic conversion
-  %(prog)s terrain.terrn -o newname              # Convert with custom output name
-  %(prog)s terrain.terrn -n "Display Name"       # Convert with custom display name shown in terrain selector
+  %(prog)s terrain.terrn -f newname              # Convert with specifed file name
+  %(prog)s terrain.terrn -d "Display Name"       # Convert with specifed display name shown in terrain selector
 ''')
     parser.add_argument('input_file', help='Input .terrn file to convert')
-    parser.add_argument('-o', '--output', help='Custom output filename (without extension) for all generated files')
-    parser.add_argument('-n', '--name', help='Custom display name shown in terrain selector')
+    parser.add_argument('-f', '--filename', help='Output filename (without extension) for all generated files')
+    parser.add_argument('-d', '--displayname', help='Display name shown in terrain selector')
     
     args = parser.parse_args()
     
@@ -718,7 +718,7 @@ Examples:
         print("Error: Input file must be a .terrn file")
         sys.exit(1)
         
-    success = convert_terrn_to_terrn2(args.input_file, args.output, args.name)
+    success = convert_terrn_to_terrn2(args.input_file, args.filename, args.displayname)
     if success:
         print("Terrain conversion completed successfully!")
     else:
