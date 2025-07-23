@@ -490,7 +490,7 @@ def convert_cfg_to_otc(cfg_file, output_name=None):
                 f.write(f'{world_size_x}, {base_texture}, blank_NRM.dds\n')
                 
                 # Write detail layer with converted texture
-                f.write('10, terrain_detail_dark_ds.dds, terrain_detail_nrm.dds, ' + detail_texture + ', R, 0.8\n')
+                f.write('10, terrain_detail_dark_ds.dds, terrain_detail_nrm.dds, ' + detail_texture + ', R, 0.5\n')
 
             print(f"Created {page_path}")
             return True
@@ -642,10 +642,11 @@ def convert_terrn_to_terrn2(input_file, output_name=None, display_name=None):
             with open(tobj_path, 'w') as f:
                 header_count = 0
                 found_first_object = False
+                required_headers = 5 if water_height else 4  # Skip 4 lines if no water
                 
                 for obj in lines:
-                    # Skip the first 5 header lines
-                    if header_count < 5:
+                    # Skip beginning lines (terrain info)
+                    if header_count < required_headers:
                         header_count += 1
                         continue
                         
